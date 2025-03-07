@@ -4,13 +4,7 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        {/* Meta SDK */}
-        <script
-          async
-          defer
-          crossOrigin="anonymous"
-          src="https://connect.facebook.net/en_US/sdk.js"
-        />
+        {/* We'll load the Facebook SDK dynamically in our helper instead */}
       </Head>
       <body>
         <Main />

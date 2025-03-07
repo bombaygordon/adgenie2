@@ -4,6 +4,7 @@ import { PlusIcon, UsersIcon, CreditCardIcon } from '@heroicons/react/24/outline
 import Image from 'next/image';
 import Link from 'next/link';
 import MetaAccountSelector from '@/components/MetaAccountSelector';
+import { initializeFacebookSDK, performFacebookLogin } from '@/lib/facebook-sdk';
 
 interface MetaAccount {
   id: string;
@@ -29,68 +30,35 @@ export default function Dashboard() {
   const [availableAccounts, setAvailableAccounts] = useState<MetaAccount[]>([]);
   const [showAccountSelector, setShowAccountSelector] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSDKInitialized, setIsSDKInitialized] = useState(false);
+  const [isSDKReady, setIsSDKReady] = useState(false);
 
-  // Load Facebook SDK
+  // Initialize Facebook SDK on component mount
   useEffect(() => {
-    const initializeFacebookSDK = () => {
-      const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-      if (!appId) {
-        console.error('Meta App ID not configured');
-        setError('Meta App ID not configured');
-        return;
-      }
-
-      try {
-        window.FB?.init({
-          appId,
-          version: 'v17.0',
-          cookie: true,
-          xfbml: false,
-          status: true
-        });
-
-        // Verify initialization
-        window.FB?.getLoginStatus((response) => {
-          console.log('FB Login Status:', response.status);
-          setIsSDKInitialized(true);
-          setError(null);
-        });
-      } catch (err) {
-        console.error('Error initializing Facebook SDK:', err);
-        setError('Failed to initialize Facebook SDK');
-      }
-    };
-
-    // Only load once
-    if (!document.getElementById('facebook-jssdk')) {
-      // Define async init function
-      window.fbAsyncInit = initializeFacebookSDK;
-
-      // Load the SDK
-      const script = document.createElement('script');
-      script.src = 'https://connect.facebook.net/en_US/sdk.js';
-      script.async = true;
-      script.defer = true;
-      script.crossOrigin = 'anonymous';
-      script.id = 'facebook-jssdk';
-      
-      script.onload = () => {
-        console.log('Facebook SDK script loaded');
-      };
-
-      script.onerror = () => {
-        setError('Failed to load Facebook SDK');
-      };
-
-      document.head.appendChild(script);
-    } else {
-      // If script exists, try to initialize again
-      initializeFacebookSDK();
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    if (!appId) {
+      setError('Meta App ID not configured in environment variables');
+      return;
     }
 
+    let isMounted = true;
+    
+    initializeFacebookSDK(appId)
+      .then(() => {
+        if (isMounted) {
+          setIsSDKReady(true);
+          setError(null);
+          console.log('Facebook SDK is ready to use');
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Facebook SDK initialization failed:', err);
+          setError('Failed to initialize Facebook SDK. Please refresh the page and try again.');
+        }
+      });
+
     return () => {
-      setIsSDKInitialized(false);
+      isMounted = false;
     };
   }, []);
 
@@ -117,14 +85,9 @@ export default function Dashboard() {
     }
   };
 
-  const connectMetaAccount = useCallback(() => {
-    if (!window.FB) {
-      setError('Facebook SDK not loaded. Please refresh the page.');
-      return;
-    }
-
-    if (!isSDKInitialized) {
-      setError('Facebook SDK is still initializing. Please try again in a moment.');
+  const connectMetaAccount = useCallback(async () => {
+    if (!isSDKReady) {
+      setError('Facebook SDK is not ready yet. Please wait a moment and try again.');
       return;
     }
 
@@ -132,35 +95,15 @@ export default function Dashboard() {
     setIsConnecting(true);
 
     try {
-      window.FB.login(
-        (response) => {
-          if (response.authResponse) {
-            fetchMetaAccounts(response.authResponse.accessToken)
-              .catch((error) => {
-                console.error('Error fetching Meta accounts:', error);
-                setError('Failed to fetch accounts. Please try again.');
-              })
-              .finally(() => {
-                setIsConnecting(false);
-              });
-          } else {
-            setError('Login was cancelled or failed');
-            setIsConnecting(false);
-          }
-        },
-        {
-          scope: 'ads_management,ads_read,business_management,public_profile,email',
-          return_scopes: true,
-          enable_profile_selector: true,
-          auth_type: 'rerequest'
-        }
-      );
+      const authResponse = await performFacebookLogin('ads_management,ads_read,business_management,public_profile,email');
+      await fetchMetaAccounts(authResponse.accessToken);
     } catch (error) {
-      console.error('Error in connectMetaAccount:', error);
-      setError('Failed to initialize Meta connection');
+      console.error('Error connecting to Meta:', error);
+      setError(error instanceof Error ? error.message : 'Failed to connect to Meta');
+    } finally {
       setIsConnecting(false);
     }
-  }, [isSDKInitialized]);
+  }, [isSDKReady]);
 
   const handleAccountSelection = (selectedAccounts: MetaAccount[]) => {
     setAccounts(prev => [
