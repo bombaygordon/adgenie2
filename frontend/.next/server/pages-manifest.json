@@ -1,0 +1,13 @@
+{
+  "/_app": "pages/_app.js",
+  "/_error": "pages/_error.js",
+  "/_document": "pages/_document.js",
+  "/settings/data-sources": "pages/settings/data-sources.js",
+  "/signup": "pages/signup.js",
+  "/dashboard/google-ads": "pages/dashboard/google-ads.js",
+  "/api/google-ads/status": "pages/api/google-ads/status.js",
+  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
+  "/": "pages/index.js",
+  "/dashboard": "pages/dashboard.js",
+  "/api/google-ads/auth": "pages/api/google-ads/auth.js"
+}
