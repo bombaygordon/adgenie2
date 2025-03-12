@@ -5,29 +5,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import MetaAccountSelector from '@/components/MetaAccountSelector';
 import { initializeFacebookSDK, performFacebookLogin } from '@/lib/facebook-sdk';
-
-interface MetaAccount {
-  id: string;
-  name: string;
-  businessName?: string;
-  status: string;
-  currency: string;
-}
-
-interface AdAccount {
-  id: string;
-  name: string;
-  status: 'active' | 'disconnected';
-  platform: 'meta';
-  lastSync?: string;
-  businessName?: string;
-  currency?: string;
-}
+import AdAccountSelector from '@/components/AdAccountSelector';
+import FacebookSDKStatus from '@/components/FacebookSDKStatus';
+import type { AdAccount, BusinessManager, ConnectedAccount } from '@/types/meta';
 
 export default function Dashboard() {
-  const [accounts, setAccounts] = useState<AdAccount[]>([]);
+  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [availableAccounts, setAvailableAccounts] = useState<MetaAccount[]>([]);
+  const [businessManagers, setBusinessManagers] = useState<BusinessManager[]>([]);
   const [showAccountSelector, setShowAccountSelector] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSDKReady, setIsSDKReady] = useState(false);
@@ -64,23 +49,44 @@ export default function Dashboard() {
 
   const fetchMetaAccounts = async (accessToken: string) => {
     try {
+      // First ensure we have a valid access token
+      if (!accessToken) {
+        throw new Error('No access token provided');
+      }
+
+      // Make the API request with proper error handling
       const res = await fetch('/api/meta/connect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
         body: JSON.stringify({ accessToken }),
       });
 
+      // Handle non-JSON responses
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Invalid response from server. Please try again.');
+      }
+
       const data = await res.json();
+      
       if (!res.ok) {
         throw new Error(data.message || 'Failed to fetch accounts');
       }
 
-      setAvailableAccounts(data.accounts);
+      if (!data.businessManagers || !Array.isArray(data.businessManagers)) {
+        throw new Error('Invalid response format from server');
+      }
+
+      setBusinessManagers(data.businessManagers);
       setShowAccountSelector(true);
+      setError(null);
     } catch (err) {
+      console.error('Failed to fetch Meta accounts:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect account');
+      setShowAccountSelector(false);
       throw err;
     }
   };
@@ -95,17 +101,26 @@ export default function Dashboard() {
     setIsConnecting(true);
 
     try {
+      // Ensure SDK is initialized before proceeding
+      await initializeFacebookSDK(process.env.NEXT_PUBLIC_META_APP_ID!);
+      
       const authResponse = await performFacebookLogin('ads_management,ads_read,business_management,public_profile,email');
+      
+      if (!authResponse || !authResponse.accessToken) {
+        throw new Error('Failed to get access token from Meta');
+      }
+
       await fetchMetaAccounts(authResponse.accessToken);
     } catch (error) {
       console.error('Error connecting to Meta:', error);
       setError(error instanceof Error ? error.message : 'Failed to connect to Meta');
+      setShowAccountSelector(false);
     } finally {
       setIsConnecting(false);
     }
   }, [isSDKReady]);
 
-  const handleAccountSelection = (selectedAccounts: MetaAccount[]) => {
+  const handleAccountSelection = (selectedAccounts: AdAccount[]) => {
     setAccounts(prev => [
       ...prev,
       ...selectedAccounts.map(account => ({
@@ -119,7 +134,7 @@ export default function Dashboard() {
       }))
     ]);
     setShowAccountSelector(false);
-    setAvailableAccounts([]);
+    setBusinessManagers([]);
   };
 
   const quickActions = [
@@ -169,6 +184,9 @@ export default function Dashboard() {
 
   return (
     <DashboardLayout>
+      {/* SDK Status Indicator (only visible in development) */}
+      <FacebookSDKStatus devOnly={true} />
+      
       <div className="p-8">
         {/* Header */}
         <div className="mb-8">
@@ -276,8 +294,8 @@ export default function Dashboard() {
               
               <button
                 onClick={connectMetaAccount}
-                disabled={isConnecting}
-                className="mt-4 inline-flex items-center px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
+                disabled={isConnecting || !isSDKReady}
+                className="mt-4 inline-flex items-center px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <PlusIcon className="h-5 w-5 mr-2" />
                 Connect another account
@@ -297,7 +315,7 @@ export default function Dashboard() {
                 </p>
                 <button
                   onClick={connectMetaAccount}
-                  disabled={isConnecting}
+                  disabled={isConnecting || !isSDKReady}
                   className="inline-flex items-center justify-center px-4 py-2 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500 text-white rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isConnecting ? (
@@ -319,12 +337,12 @@ export default function Dashboard() {
 
         {/* Account Selector Modal */}
         {showAccountSelector && (
-          <MetaAccountSelector
-            accounts={availableAccounts}
+          <AdAccountSelector
+            businessManagers={businessManagers}
             onSelect={handleAccountSelection}
             onClose={() => {
               setShowAccountSelector(false);
-              setAvailableAccounts([]);
+              setBusinessManagers([]);
             }}
           />
         )}

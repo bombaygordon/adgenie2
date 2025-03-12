@@ -30,7 +30,7 @@ const starterBoardItems = [
   { name: 'Best Headlines', href: '/dashboard/headlines', icon: DocumentTextIcon },
   { name: 'Best Copy', href: '/dashboard/copy', icon: DocumentTextIcon },
   { name: 'Video Drop-off', href: '/dashboard/video', icon: VideoCameraIcon },
-  { name: 'Account Performance', href: '/dashboard/performance', icon: ChartBarIcon },
+  { name: 'Account Performance', href: '/dashboard/account-performance', icon: ChartBarIcon },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {

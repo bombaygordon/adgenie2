@@ -46,4 +46,24 @@ declare global {
   }
 }
 
+export interface AdAccount {
+  id: string;
+  name: string;
+  status: string;
+  currency: string;
+  businessName?: string;
+}
+
+export interface BusinessManager {
+  id: string;
+  name: string;
+  adAccounts: AdAccount[];
+}
+
+export interface ConnectedAccount extends AdAccount {
+  platform: 'meta';
+  status: 'active' | 'disconnected';
+  lastSync?: string;
+}
+
 export {}; 
