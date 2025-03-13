@@ -59,8 +59,24 @@ const GoogleAdsBoard: NextPage = () => {
     }
   };
 
-  const handleConnect = () => {
-    router.push('/api/google-ads/auth');
+  const handleConnect = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/google-ads/auth');
+      const data = await response.json();
+      
+      if (data.authUrl) {
+        console.log('Redirecting to:', data.authUrl);
+        window.location.href = data.authUrl;
+      } else {
+        throw new Error('Failed to get authentication URL');
+      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      alert('Failed to initialize Google Ads connection. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const fetchGoogleAdsData = async () => {

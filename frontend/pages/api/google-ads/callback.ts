@@ -1,52 +1,47 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_ADS_CLIENT_ID,
-  process.env.GOOGLE_ADS_CLIENT_SECRET,
-  `${process.env.NEXT_PUBLIC_APP_URL}/api/google-ads/callback`
-);
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const { code } = req.query;
-
-  if (!code || typeof code !== 'string') {
-    return res.status(400).json({ message: 'Authorization code is required' });
-  }
-
   try {
-    // Exchange the authorization code for tokens
-    const { tokens } = await oauth2Client.getToken(code);
-    const { refresh_token, access_token } = tokens;
+    // Debug log everything
+    console.log('Full request query:', req.query);
+    
+    const { code } = req.query;
 
-    if (!refresh_token) {
-      throw new Error('No refresh token received');
+    if (!code || typeof code !== 'string') {
+      console.error('No code provided in query parameters');
+      return res.status(400).json({ error: 'No authorization code provided' });
     }
 
-    // TODO: Store these tokens securely in your database
-    // Associate them with the user's account
-    
-    // For now, we'll store them in an HTTP-only cookie
-    // In production, you should store them more securely
-    res.setHeader('Set-Cookie', [
-      `googleAdsRefreshToken=${refresh_token}; HttpOnly; Path=/; SameSite=Lax; Secure`,
-      `googleAdsAccessToken=${access_token}; HttpOnly; Path=/; SameSite=Lax; Secure`
-    ]);
+    // Initialize OAuth2 client with environment variables
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      `${process.env.NEXTAUTH_URL}/api/google-ads/callback`
+    );
 
-    // Redirect back to the Google Ads dashboard
+    // Exchange code for tokens
+    const { tokens } = await oauth2Client.getToken(code);
+    console.log('Successfully exchanged code for tokens');
+
+    // Set cookies with tokens
+    if (tokens.access_token) {
+      res.setHeader('Set-Cookie', [
+        `googleAccessToken=${tokens.access_token}; HttpOnly; Secure; Path=/; SameSite=Lax`,
+        tokens.refresh_token ? 
+          `googleRefreshToken=${tokens.refresh_token}; HttpOnly; Secure; Path=/; SameSite=Lax` : 
+          ''
+      ].filter(Boolean));
+    }
+
+    // Redirect to dashboard
     res.redirect('/dashboard/google-ads');
-  } catch (error: any) {
-    console.error('OAuth callback error:', error);
-    res.status(500).json({
-      message: 'Failed to complete OAuth flow',
-      error: error.message
-    });
+  } catch (error) {
+    console.error('Error in Google Ads callback:', error);
+    res.status(500).json({ error: 'Failed to complete OAuth flow' });
   }
 } 
